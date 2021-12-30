@@ -8,105 +8,17 @@ const log4js = require('log4js');
 const config = require('./conf/conf.js');
 
 log4js.configure(config.log4jsConfig);
-const logger = log4js.getLogger('Defistation\'s Data Provider');
-logger.info('Defistation\'s Data Provider start.');
+const logger = log4js.getLogger('Defistation\'s Data Provider[Mushrooms Finance]');
+logger.info('Defistation\'s Data Provider[Mushrooms Finance] start.');
 
-const provider = new ethers.providers.JsonRpcProvider('https://bsc-dataseed.binance.org/');
+const testSwitchOn = true;
+const mushroomsTvlTotalEndpoint = 'swapoodxoh.execute-api.ap-southeast-1.amazonaws.com';
+const mushroomsTvlDetailEndpoint = 'vjeieiw4tf.execute-api.us-east-1.amazonaws.com';
+const mushroomsFarmingPool = '0x36cb43EB6F5168a1f8310b030a4De6B3B58B4664';
 
-const pool1Address = '0x9c00954A8A58f5DDa8C011D6233093763F13C8Da';
-
-const pool2Address = '0x27F545300F7b93c1c0184979762622Db043b0805';
-
-const daiAddress = '0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3';
-
-const busdAddress = '0xe9e7cea3dedca5984780bafc599bd69add087d56';
-
-const usdtAddress = '0x55d398326f99059ff775485246999027b3197955';
-
-const qusdAddress = '0xb8c540d00dd0bf76ea12e4b4b95efc90804f924e';
-
-const pool1Contract = new ethers.Contract(pool1Address, BStablePool.abi, provider);
-const pool2Contract = new ethers.Contract(pool2Address, BStablePool.abi, provider);
-const daiContract = new ethers.Contract(daiAddress, BEP20.abi, provider);
-const busdContract = new ethers.Contract(busdAddress, BEP20.abi, provider);
-const usdtContract = new ethers.Contract(usdtAddress, BEP20.abi, provider);
-const qusdContract = new ethers.Contract(qusdAddress, BEP20.abi, provider);
-
-let arrP = new Array();
-
-arrP.push(daiContract.balanceOf(pool1Address));
-arrP.push(busdContract.balanceOf(pool1Address));
-arrP.push(usdtContract.balanceOf(pool1Address));
-arrP.push(qusdContract.balanceOf(pool2Address));
-arrP.push(busdContract.balanceOf(pool2Address));
-arrP.push(usdtContract.balanceOf(pool2Address));
-
-Promise.all(arrP).then(res => {
-    let p1DAI_Bal = new BigNumber(ethers.utils.formatEther(res[0]));
-    let p1BUSD_Bal = new BigNumber(ethers.utils.formatEther(res[1]));
-    let p1USDT_Bal = new BigNumber(ethers.utils.formatEther(res[2]));
-    let p2QUSD_Bal = new BigNumber(ethers.utils.formatEther(res[3]));
-    let p2BUSD_Bal = new BigNumber(ethers.utils.formatEther(res[4]));
-    let p2USDT_Bal = new BigNumber(ethers.utils.formatEther(res[5]));
-
-    let tvl = p1DAI_Bal.plus(p1BUSD_Bal).plus(p1USDT_Bal).plus(p2QUSD_Bal).plus(p2BUSD_Bal).plus(p2USDT_Bal);
-    logger.info('Total value locked: ' + tvl.toFormat(18, BigNumber.ROUND_DOWN));
-
-    let body = {
-        "tvl": Number(tvl.toFixed(4, BigNumber.ROUND_HALF_UP)),
-        "volume": 0,
-        "bnb": 0,
-        "data": {
-            "pairEntities": [
-                {
-                    "id": "0x9c00954A8A58f5DDa8C011D6233093763F13C8Da",
-                    "token0": {
-                        "symbol": "DAI"
-                    },
-                    "token1": {
-                        "symbol": "BUSD"
-                    },
-                    "token2": {
-                        "symbol": "USDT"
-                    }
-                },
-                {
-                    "id": "0x27F545300F7b93c1c0184979762622Db043b0805",
-                    "token0": {
-                        "symbol": "QUSD"
-                    },
-                    "token1": {
-                        "symbol": "BUSD"
-                    },
-                    "token2": {
-                        "symbol": "USDT"
-                    }
-                }
-            ]
-        },
-        "test": false
-    };
-    let clientId = config.default.clientId;
-    let clientSecret = config.default.key;
-    let auth = 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64');
-    let bodyStr = JSON.stringify(body);
-    logger.info(bodyStr);
-    let headers = {
-        // 'Host': 'www.example.com',
-        'Authorization': auth,
-        'Content-Type': 'application/json',
-        'Content-Length': bodyStr.length
-    };
-    let options = {
-        host: 'api.defistation.io',
-        port: 443,
-        path: '/dataProvider/tvl',
-        method: 'POST',
-        headers: headers
-    };
+function httpsPostRequest(options, bodyStr){
     let req = https.request(options, (res) => {
-        logger.info(`STATUS: ${res.statusCode}`);
-        logger.info(`HEADERS: ${JSON.stringify(res.headers)}`);
+        logger.info(`STATUS: ${res.statusCode}, HEADERS: ${JSON.stringify(res.headers)}`);
         res.setEncoding('utf8');
         res.on('data', (chunk) => {
             logger.info(`BODY: ${chunk}`);
@@ -120,7 +32,76 @@ Promise.all(arrP).then(res => {
         logger.error(`problem with request: ${e.message}`);
     });
 
-    // write data to request body
     req.write(bodyStr);
     req.end();
-});
+}
+
+async function postTvlReport(reportBody){	
+
+    let clientId = config.default.clientId;
+    let clientSecret = config.default.key;
+    let auth = 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64');
+    let bodyStr = JSON.stringify(reportBody);
+    //logger.info(bodyStr);
+	
+    let headers = {'Authorization': auth, 'Content-Type': 'application/json', 'Content-Length': bodyStr.length};
+    let options = {host: 'api.defistation.io', port: 443, path: '/dataProvider/tvl', method: 'POST', headers: headers};	
+	
+    httpsPostRequest(options, bodyStr);
+}
+
+async function readFromMushrooms(_endpoint, _path, _reportBody, _tvlRead){
+    const options = {hostname: _endpoint, port: 443, path: _path, method: 'GET', family: 4};
+
+    const req = https.request(options, (res) => {
+        //console.log('statusCode:', res.statusCode);
+        //console.log('headers:', res.headers);
+        res.setEncoding('utf8');
+
+        let _d = '';
+        res.on('data', (chunk) => {
+            _d += chunk;
+        });
+		
+        res.on('end', () => {                
+            let _dStr = JSON.parse(_d.toString());
+            //logger.info(JSON.stringify(_dStr));
+			
+            if(_tvlRead){
+               _reportBody['tvl'] = _dStr['result'];			
+               //logger.info(JSON.stringify(_reportBody));			   
+               readFromMushrooms(mushroomsTvlDetailEndpoint, "/apy?chainId=56", _reportBody, false);
+            }else{
+               let _data = {"farmingAddress": mushroomsFarmingPool, "farms": [], "vaults": []};
+			   
+               let _dFarms = _dStr['result']['farms'];
+               for(let i = 0;i < _dFarms.length;i++){
+                   _data['farms'].push({'lpToken': _dFarms[i]['lpToken'], 'liquidityLocked': _dFarms[i]['liquidity_locked']});
+               }
+			   
+               let _dVaults = _dStr['result']['vaults'];
+               for(let j = 0;j < _dVaults.length;j++){
+                   _data['vaults'].push({'wantToken': _dVaults[j]['token'], 'address': _dVaults[j]['vault_address'], 'liquidityLocked': _dVaults[j]['liquidity_locked']});
+               }
+			   
+               _reportBody['data'] = _data;
+               //logger.info(JSON.stringify(_reportBody));	
+               postTvlReport(_reportBody);
+            }				
+        });
+    });
+
+    req.on('error', (e) => {
+        console.error(e);
+    });
+	
+    req.end();
+}
+
+const mainFunc = async function(){
+    let reportBody = {"tvl": 0, "volume": 0, "bnb": 0, "test": testSwitchOn, "data": {}};	
+    await readFromMushrooms(mushroomsTvlTotalEndpoint, "/tvl?chainId=56", reportBody, true);
+};
+
+mainFunc();
+
